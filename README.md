@@ -4,16 +4,12 @@
 
 En Java-basert skrivebordsapplikasjon utviklet med Swing, tilkoblet en MySQL-database. Systemet er designet for å administrere kunder og transportdata gjennom et brukervennlig grensesnitt.
 
-## Funksjoner
-
-- Brukerautentiseringssystem
-- Kundeadministrasjon
-- Ansattadministrasjon
-- Ordrebehandling
-- Produktadministrasjon
-- Betalingssporing
-- Kontorstyring
-- Detaljert dashbord med analyse
+## Nøkkelfunksjoner:
+CRUD-operasjoner for kunde- og transportdata
+MySQL-databaseintegrasjon
+Dynamisk temabytting
+Eksport av data
+JavaDoc-dokumentasjon inkludert
 
 ## Teknologier Brukt
 
