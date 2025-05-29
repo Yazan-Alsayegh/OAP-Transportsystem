@@ -1,0 +1,433 @@
+package com.transportSys.tableName;
+
+import com.transportSys.connection.dbConnection;
+import com.transportSys.utils.*;
+import com.transportSys.actiontable.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.EventQueue;
+import java.awt.FlowLayout;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.JTextArea;
+import javax.swing.UIManager;
+import javax.swing.border.EmptyBorder;
+import javax.swing.border.LineBorder;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JOptionPane;
+import javax.swing.BoxLayout;
+import javax.swing.table.JTableHeader;
+import javax.swing.table.TableCellRenderer;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import java.awt.Font;
+import java.awt.FontMetrics;
+
+/**
+ * 
+ * Class representing the respective table window in the application.
+ * 
+ * @author 7090, 7072, 7074, 7107, 7073, 7078 
+ *
+ */
+public class tableNameWindow {
+
+	/**
+	 * Represents the main frame of the window.
+	 */
+	
+	public JFrame frame;
+
+	// The table displaying table information
+	private JTable table;
+
+	// Connection object for database interaction
+	private Connection conn = null;
+
+	// Scroll pane to handle scrolling within the table
+	private JScrollPane scrollPane;
+
+	// Handler for deselecting selections on an outside click
+	private DeselectOnOutsideClick deselectHandler;
+
+	/**
+	 * Main method to start the application.
+	 * 
+	 * @param args Command line arguments.
+	 */
+
+	@SuppressWarnings("deprecation")
+	public static void main(String[] args) {
+		// FlatLaf initialization code
+		try {
+			// Set FlatIntelliJLaf as the default Look and Feel
+			com.formdev.flatlaf.FlatIntelliJLaf.install();
+		} catch (Exception ex) {
+			System.err.println("Failed to initialize FlatLaf");
+		}
+
+		EventQueue.invokeLater(new Runnable() {
+			public void run() {
+				try {
+					tableNameWindow window = new tableNameWindow();
+					window.frame.setVisible(true);
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		});
+	}
+
+	/**
+	 * Constructor for the table window class. Initializes the window and sets up
+	 * various components.
+	 */
+
+	public tableNameWindow() {
+		initialize();
+		connectToDatabase();
+		loadTable();
+		TableHeaderTooltipManager.setupTableHeaderTooltips(table); // Import Tooltip for header
+		TableColumnResizer.resizeColumnWidth(table); // Import Column Resizer
+		deselectHandler = new DeselectOnOutsideClick(frame, table, scrollPane); // Initializes deselect handler
+		deselectHandler.setupDeselectOnOutsideClick(); // Sets up deselect behavior
+		new TableBuilder();
+	}
+
+	/**
+	 * Inner class acting as a custom cell renderer for word-wrapping in table
+	 * cells.
+	 */
+	public class WordWrapCellRenderer extends JTextArea implements TableCellRenderer {
+		/**
+		 * 
+		 */
+		private static final long serialVersionUID = 1L;
+
+		/**
+		 * Constructor for WordWrapCellRenderer class. Enables word wrap, line wrap,
+		 * sets the renderer as opaque, and applies padding.
+		 */
+		public WordWrapCellRenderer() {
+			setWrapStyleWord(true); // Enable word wrap at word boundaries
+			setLineWrap(true); // Enable line wrap within the cell
+			setOpaque(true); // Set the renderer to be opaque
+			setBorder(new EmptyBorder(5, 5, 5, 5)); // Apply padding to the renderer
+		}
+
+		public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus,
+				int row, int column) {
+			if (isSelected) {
+				setForeground(table.getSelectionForeground());
+				setBackground(table.getSelectionBackground());
+			} else {
+				setForeground(table.getForeground());
+				setBackground(table.getBackground());
+			}
+			setFont(table.getFont());
+			if (hasFocus) {
+				setBorder(UIManager.getBorder("Table.focusCellHighlightBorder"));
+				if (table.isCellEditable(row, column)) {
+					setForeground(UIManager.getColor("Table.focusCellForeground"));
+					setBackground(UIManager.getColor("Table.focusCellBackground"));
+				}
+			} else {
+				setBorder(new EmptyBorder(5, 5, 5, 5));
+			}
+
+			setText((value == null) ? "" : value.toString());
+			adjustRowHeight(table, row);
+			return this;
+		}
+
+		/**
+		 * Calculate the preferred height of a row to accommodate all cell content.
+		 */
+
+		private void adjustRowHeight(JTable table, int row) {
+			// The default height is a constant set to 16.
+			int cHeight = table.getRowHeight(row);
+			// The new height is based on the preferred height of the JTextArea we just used
+			// to render the cell.
+			int prefHeight = getPreferredSize().height;
+			if (cHeight != prefHeight) {
+				table.setRowHeight(row, prefHeight);
+			}
+		}
+	}
+
+	/**
+	 * Initializes and sets up the components in the window.
+	 */
+
+	private void initialize() {
+		frame = new JFrame();
+		frame.setTitle("table name"); // Set the title of the GUI window
+		frame.setBounds(100, 100, 1210, 600);
+		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+		frame.getContentPane().setLayout(new BorderLayout());
+
+		JPanel panel = new JPanel(new BorderLayout());
+		frame.getContentPane().add(panel, BorderLayout.CENTER);
+
+		scrollPane = new JScrollPane();
+		scrollPane.setEnabled(false);
+
+		panel.add(scrollPane, BorderLayout.CENTER);
+
+		table = new JTable() {
+			/**
+			 * The serial version UID for serialization.
+			 */
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public String getToolTipText(MouseEvent e) {
+				int row = rowAtPoint(e.getPoint());
+				int col = columnAtPoint(e.getPoint());
+				if (row != -1 && col != -1) {
+					Object value = getValueAt(row, col);
+					if (value != null) {
+						return wrapTooltipText(value.toString(), 200); // max-width set to 200px
+					}
+				}
+				return super.getToolTipText(e);
+			}
+		};
+
+		table.setFont(new Font("Verdana", Font.PLAIN, 11));
+		JTableHeader header = table.getTableHeader();
+		header.setBackground(Color.BLACK);
+		header.setForeground(Color.WHITE); // Set the text color to white for better visibility against the black
+											// background
+		header.setFont(new Font("Yu Gothic UI Semibold", Font.BOLD, 12));
+		scrollPane.setViewportView(table);
+		table.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
+
+		// Enable table sorting
+		table.setAutoCreateRowSorter(true);
+
+		// ------------- [ Search Field ] ------------- //
+
+		JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 20, 0)); // Added 20px horizontal gap
+		panel.add(searchPanel, BorderLayout.NORTH);
+		searchPanel.setBorder(new EmptyBorder(40, 100, 10, 0));
+
+		// Themechanger toggle button
+		ThemeChanger themeButton = new ThemeChanger(table, frame);
+		themeButton.setPreferredSize(new Dimension(60, 30));
+		themeButton.setMinimumSize(new Dimension(60, 30));
+		themeButton.setMaximumSize(new Dimension(60, 30));
+		searchPanel.add(themeButton);
+
+		// search field 1
+		JPanel searchField_1 = new JPanel(new BorderLayout());
+		JLabel lblsearchField_1 = new JLabel("Search Field 1");
+		lblsearchField_1.setFont(new Font("Yu Gothic UI Semibold", Font.BOLD, 14));
+		searchField_1.add(lblsearchField_1, BorderLayout.NORTH);
+
+		JTextArea textAreaSearchField_1 = new JTextArea();
+		textAreaSearchField_1.setBorder(new LineBorder(Color.BLACK, 2));
+		searchField_1.add(textAreaSearchField_1, BorderLayout.CENTER);
+		searchPanel.add(searchField_1);
+
+		// search field 2
+		JPanel searchField_2 = new JPanel(new BorderLayout());
+		JLabel lblsearchField_2 = new JLabel("Search Field 2");
+		lblsearchField_2.setFont(new Font("Yu Gothic UI Semibold", Font.BOLD, 14));
+		searchField_2.add(lblsearchField_2, BorderLayout.NORTH);
+
+		JTextArea textAreaSearchField_2 = new JTextArea();
+		textAreaSearchField_2.setBorder(new LineBorder(Color.BLACK, 2));
+		searchField_2.add(textAreaSearchField_2, BorderLayout.CENTER);
+		searchPanel.add(searchField_2);
+
+		// search field 2
+		JPanel searchField_3 = new JPanel(new BorderLayout());
+		JLabel lblsearchField_3 = new JLabel("Search Field 3");
+		lblsearchField_3.setFont(new Font("Yu Gothic UI Semibold", Font.BOLD, 14));
+		searchField_3.add(lblsearchField_3, BorderLayout.NORTH);
+
+		JTextArea textAreaSearchField_3 = new JTextArea();
+		textAreaSearchField_3.setBorder(new LineBorder(Color.BLACK, 2));
+		searchField_3.add(textAreaSearchField_3, BorderLayout.CENTER);
+		searchPanel.add(searchField_3);
+
+		KeyAdapter searchAdapter = new KeyAdapter() {
+			@Override
+			public void keyReleased(KeyEvent arg0) {
+				searchTable(textAreaSearchField_1.getText(), textAreaSearchField_2.getText(),
+						textAreaSearchField_3.getText());
+			}
+		};
+
+		textAreaSearchField_1.addKeyListener(searchAdapter);
+		textAreaSearchField_2.addKeyListener(searchAdapter);
+		textAreaSearchField_3.addKeyListener(searchAdapter);
+
+		new JPopupMenu();
+
+		// inherit the copy function
+		table.setComponentPopupMenu(CopyAction.createCopyMenu(table));
+
+		// Panel for buttons
+
+		JPanel panelButtons = new JPanel();
+		panel.add(panelButtons, BorderLayout.EAST);
+
+		// Set padding for the entire panel
+		panelButtons.setBorder(new EmptyBorder(30, 30, 30, 30));
+
+		panelButtons.setLayout(new BoxLayout(panelButtons, BoxLayout.Y_AXIS));
+
+		// Define a uniform size for all buttons
+		Dimension buttonSize = new Dimension(100, 30);
+
+		Component verticalStrut = Box.createVerticalStrut(10);
+		panelButtons.add(verticalStrut);
+
+		// Add Button
+
+		AddAction addButton = new AddAction("Add", table, "PrimaryKey", "TabelName");
+		addButton.setFont(new Font("Yu Gothic UI Semibold", Font.PLAIN, 12));
+		addButton.setText("ADD");
+		addButton.setMaximumSize(buttonSize);
+		panelButtons.add(addButton);
+
+		// Space between buttons
+		panelButtons.add(Box.createVerticalStrut(10)); // 10px vertical space
+
+		// Edit Button
+
+		EditAction editButton = new EditAction("Edit", table, "PrimaryKey", "TabelName");
+		editButton.setFont(new Font("Yu Gothic UI Semibold", Font.PLAIN, 12));
+		editButton.setText("EDIT");
+		editButton.setMaximumSize(buttonSize);
+		panelButtons.add(editButton);
+
+		// Space between buttons
+		panelButtons.add(Box.createVerticalStrut(10)); // 10px vertical space
+
+		// Delete Button
+
+		DeleteAction deleteButton = new DeleteAction("Delete", table, "PrimaryKey", "TabelName");
+		deleteButton.setFont(new Font("Yu Gothic UI Semibold", Font.PLAIN, 12));
+		deleteButton.setText("DELETE");
+		deleteButton.setMaximumSize(buttonSize);
+		panelButtons.add(deleteButton);
+
+		// Space between buttons
+		panelButtons.add(Box.createVerticalStrut(10)); // 10px vertical space
+
+		// Export Button
+
+		ExportAction exportButton = new ExportAction(table);
+		exportButton.setFont(new Font("Yu Gothic UI Semibold", Font.PLAIN, 12));
+		exportButton.setText("EXPORT");
+		exportButton.setMaximumSize(buttonSize);
+		panelButtons.add(exportButton);
+
+	}
+
+	/**
+	 * Connects to the database.
+	 */
+
+	private void connectToDatabase() {
+		try {
+			conn = dbConnection.getConnection();
+		} catch (SQLException e) {
+			e.printStackTrace();
+			JOptionPane.showMessageDialog(frame, "Unable to connect to the database");
+		}
+	}
+
+	/**
+	 * Loads data into the table from the database.
+	 */
+
+	private void loadTable() {
+		try {
+			String query = "SELECT * FROM TableName ORDER BY PrimaryKey DESC";
+			PreparedStatement pst = conn.prepareStatement(query);
+			ResultSet rs = pst.executeQuery();
+			table.setModel(TableBuilder.buildTableModel(rs)); // Use the tableBuilder instance to call the
+																// buildTableModel method
+			table.setShowGrid(true); // Make grid lines visible and set their color
+			table.setGridColor(Color.LIGHT_GRAY);
+			scrollPane.setBorder(BorderFactory.createEmptyBorder(30, 50, 30, 0)); // Add 50px padding to the left of the
+																					// table
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+	}
+
+	/**
+	 * Searches the Table table using specified criteria for filtering.
+	 * 
+	 * @param searchField_1 Text to search within the SearchCriteria_1
+	 *                                 field.
+	 * @param searchField_2   Text to search within the SearchCriteria_2
+	 *                                 field.
+	 * @param searchField_3          Text to search within the SearchCriteria_3
+	 *                                 associated with the TableName
+	 *
+	 */
+
+	private void searchTable(String searchField_1, String searchField_2,
+			String searchField_3) {
+		try {
+			String query = "SELECT * FROM TableName " + "WHERE (SearchCriteria_1 LIKE ?) "
+					+ "AND (SearchCriteria_2 LIKE ? OR ? IS NULL) " + "AND (SearchCriteria_3 LIKE ? OR ? IS NULL) ";
+			PreparedStatement pst = conn.prepareStatement(query);
+
+			pst.setString(1, "%" + searchField_1 + "%");
+			pst.setString(2, "%" + searchField_2 + "%");
+			pst.setString(3, searchField_2.isEmpty() ? null : searchField_2);
+			pst.setString(4, "%" + searchField_3 + "%");
+			pst.setString(5, searchField_3.isEmpty() ? null : searchField_3);
+			ResultSet rs = pst.executeQuery();
+			table.setModel(TableBuilder.buildTableModel(rs)); // Use the tableBuilder instance to call the
+																// buildTableModel method
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+	}
+
+	/**
+	 * Generates HTML-wrapped tooltips optimized for individual table instances.
+	 * 
+	 * @param text     The text to be wrapped.
+	 * @param maxWidth The maximum width for the tooltip.
+	 * @return HTML-wrapped tooltip text.
+	 */
+
+	private String wrapTooltipText(String text, int maxWidth) {
+		FontMetrics metrics = table.getFontMetrics(table.getFont());
+		StringBuilder wrappedText = new StringBuilder("<html>");
+		StringBuilder line = new StringBuilder();
+
+		for (String word : text.split(" ")) {
+			if (metrics.stringWidth(line.toString() + word) < maxWidth) {
+				line.append(word).append(" ");
+			} else {
+				wrappedText.append(line).append("<br>");
+				line = new StringBuilder(word).append(" ");
+			}
+		}
+		wrappedText.append(line);
+		wrappedText.append("</html>");
+		return wrappedText.toString();
+	}
